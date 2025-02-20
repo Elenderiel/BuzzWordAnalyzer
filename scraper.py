@@ -1,84 +1,135 @@
 import requests, math, pandas
 from bs4 import BeautifulSoup as bs
+
 import matplotlib.pyplot as plt
 import seaborn as sns
+import networkx as nx
+from pyvis.network import Network
+
 from wordfreq import zipf_frequency, top_n_list
 
 
-commonWords = top_n_list('en', 30)
-#'you' and 'we' could be interesting to include
-commonWords.pop(10)                                 
-commonWords.pop(28)
-
 url = 'https://www.vaarhaft.com/'
 
+stripCharacters = '.,:;?!&*()|'
+commonWords = top_n_list('en', 30)
+columnCount = 50
+
+
+def main():
+    response = getData(url)
+    (wordSet, wordGraph) = getWordData(response)
+
+    #comment out visualization functions you don't need
+    plotWordCount(wordSet)
+    plotWordFrequency(wordSet)
+
+    visualizeGraph(wordSet, wordGraph)
 
 def getData(url):
+    #requests data from url and extracts the html/text object
     try:
         request = requests.get(url, timeout=15)
         if request.status_code == 200:
             response = request.text
-            getWordData(response)
+            return response
         else:
             print(f'Request failed with status: {request.status_code}')
     except Exception as e:
         print(f'an exception occured while requesting data from {url}: {e}')
         exit()
 
-def getWordData(response):
+
+def getWordData(response) -> tuple:
+    #extracts all text from the websites html content. The text from each html element is seperated into sections
     try:
         soup = bs(response, 'html.parser')
-        text = soup.get_text(separator=' ', strip=True)
-        wordList = [w.strip('.:,|?!').lower() for w in text.split(' ')]
-
-        #iterate over words, create dict of unique words and their word count
-        wordSet = {}
-        for word in wordList:
-            if word not in wordSet:
-                wordSet[word] = {'count' : 1, 'frequencyDiff' : 0}
-            else:
-                wordSet[word]['count'] += 1
-        
-        #exclude common words
-        for commonWord in commonWords:
-            wordSet.pop(commonWord, None)
-        for word in wordSet:
-            wordSet[word]['frequencyDiff'] = getFrequency(word, wordSet[word]['count'], len(wordList))
-        
-        plotWordCount(wordSet)
-        plotWordFrequency(wordSet)
+        text = soup.get_text(separator='\n', strip=True)
+        sectionList = [w for w in text.split('\n')]
     except Exception as e:
         print(f'could not extract text: {e}')
+    
+    #iterates through each section building a dictionary containing the set of words and their count
+    #also builds edge list/dict containing the average distance (in words) between two words, later used as edge weights in the force graph
+    wordSet = {}
+    wordGraph = {}
+    for section in sectionList:
+        words = [word.strip(stripCharacters).lower() for word in section.split(' ')]
+        
+        for i, word in enumerate(words):
+            updateCountDict(wordSet, word)
+            if i != len(words)-1:
+                updateGraphDict(wordGraph, words, word, i)
+        
+    #exclude common words from wordSet.
+    #networkx will remove all common words (nodes) in the wordGraph later
+    for commonWord in commonWords:
+        wordSet.pop(commonWord, None)
+     
+    #add frequency data for each word in wordSet
+    addFrequencies(wordSet, len(wordSet))
+    
+    return (wordSet, wordGraph)
 
-def getFrequency(word:str, wordCount:int, totalCount:int):
+
+def updateCountDict(wordSet, word):
+    #initializing word-count pair or updating count
+    try:
+        if word not in wordSet:
+            wordSet[word] = {'count': 1}
+        else:
+            wordSet[word]['count'] += 1
+    except Exception as e:
+        print(f'an exception occured while building the word-count dictionary: {e}')
+
+
+def updateGraphDict(wordGraph, words, word, i):
+    #looping over every unchecked word in the same section and updating the weight/distance of the edge
+    for n, neighbourWord in enumerate(words[i+1:], start=i+1):
+        distance = 1 / (n - i)
+        key = tuple(sorted((word, neighbourWord)))
+        wordGraph[key] = wordGraph.get(key, 0) + distance
+
+
+def addFrequencies(wordSet:dict, wordCount:int):
+    for word in wordSet:
+        wordSet[word]['frequency'] = getFrequency(word, wordSet[word]['count'], wordCount)
+
+
+def getFrequency(word:str, wordCount:int, totalCount:int) -> float:
     try:
         expectedFrequency = zipf_frequency(word, 'en')
+        #zipf_frequency returns 0 for unknown words (often brand names etc.)
         if expectedFrequency == 0: expectedFrequency = 1
-
-        #computes the observed frequency (per billion words) and matches it to the log 10 scale of the zipf frequency
-        observedFrequency = round(math.log10(wordCount/totalCount * 1e9), 2)
-        return round(observedFrequency/expectedFrequency, 2)
     except Exception as e:
-        print(f"couldn't compute frequencies for {word}: {e}")
-        return (1)
+        print(f"an exception occured while getting zipf_frequencies for {word}: {e}")
+        return 0
 
-def getPlotSize(length):
-    minWidth = 0.5
-    plotWidth = max(10, length * minWidth - 10)
+    #computes the observed frequency (per billion words) and matches it to the log 10 scale of the zipf frequency
+    observedFrequency = round(math.log10(wordCount/totalCount * 1e9), 2)
+    return round(observedFrequency/expectedFrequency, 2)
+
+
+def getPlotSize(length:int) -> tuple:
+    #get dynamic plot size based on number of data entries
+    colWidth = 0.5
+    plotWidth = max(10, length * colWidth - 10)
     return (plotWidth, 6)
 
-def getDataFrame(dict, order):
+
+def getDataFrame(dict:dict, order:str):
     try:
         df = pandas.DataFrame.from_dict(dict, orient='index')
         df.reset_index(inplace=True)
         df.columns = ['words', 'count', 'frequency']
         df = df.sort_values(by=order, ascending=False)
-        df = df.head(50)
+        df = df.head(columnCount)
         return df
     except Exception as e:
-        print(f"couldn't create dataframe, sorted by {order}: {e}")
+        print(f"couldn't create dataframe for {order}: {e}")
 
-def plotWordCount(wordSet):
+
+def plotWordCount(wordSet:dict):
     df = getDataFrame(wordSet, 'count')
 
     fig, ax = plt.subplots(figsize=getPlotSize(len(df)))
@@ -88,7 +139,8 @@ def plotWordCount(wordSet):
     plt.tight_layout()
     plt.show()
 
-def plotWordFrequency(wordSet):
+
+def plotWordFrequency(wordSet:dict):
     df = getDataFrame(wordSet, 'frequency')
 
     fig, ax = plt.subplots(figsize=getPlotSize(len(df)))
@@ -98,4 +150,26 @@ def plotWordFrequency(wordSet):
     plt.tight_layout()
     plt.show()
 
-getData(url)
+
+def visualizeGraph(nodes:dict, edges:dict):
+    try:
+        G = nx.Graph()
+        G.add_nodes_from([(node, values) for node, values in nodes.items()])
+        G.add_weighted_edges_from([(x, y, weight) for (x, y), weight in edges.items()])
+        G.remove_nodes_from(commonWords)
+
+        positions = nx.spring_layout(G, seed=1, iterations=100, threshold=0.7e-3, k=5/len(nodes)**0.5)
+        nt = Network(height='100vh', width='100%', notebook=False)
+        for node, (x, y) in positions.items():
+            size = 5
+            color = 'rgba(0,0,0,0.5)'
+            if node in nodes: size = nodes[node]['count']**0.5
+            nt.add_node(node, x=x * 1500, y=y * 1500, size=size*3, color=color, font={'vadjust': -10})
+        nt.toggle_drag_nodes(False)
+        nt.toggle_physics(False)
+        nt.show('word_graph.html', notebook=False)
+    except Exception as e:
+        print(e)
+
+
+main()

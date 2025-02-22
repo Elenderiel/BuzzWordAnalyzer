@@ -20,7 +20,7 @@ plotFileType = 'svg' #valid file types: svg, png, jpg, pdf, tiff
 
 def main():
     response = getData(url)
-    (wordSet, wordGraph) = getWordData(response)
+    (wordSet, wordGraph) = buildWordGraphs(response)
 
     #comment out visualization functions you don't need
     plotWordCount(wordSet)
@@ -42,7 +42,7 @@ def getData(url):
         exit()
 
 
-def getWordData(response) -> tuple:
+def buildWordGraphs(response) -> tuple:
     #extracts all text from the websites html content. The text from each html element is seperated into sections
     try:
         soup = bs(response, 'html.parser')
@@ -69,7 +69,8 @@ def getWordData(response) -> tuple:
         wordSet.pop(commonWord, None)
      
     #add frequency data for each word in wordSet
-    addFrequencies(wordSet, len(wordSet))
+    for word in wordSet:
+        wordSet[word]['frequency'] = getFrequency(word, wordSet[word]['count'], len(wordSet))
     
     return (wordSet, wordGraph)
 
@@ -91,11 +92,6 @@ def updateGraphDict(wordGraph, words, word, i):
         distance = 1 / (n - i)
         key = tuple(sorted((word, neighbourWord)))
         wordGraph[key] = wordGraph.get(key, 0) + distance
-
-
-def addFrequencies(wordSet:dict, wordCount:int):
-    for word in wordSet:
-        wordSet[word]['frequency'] = getFrequency(word, wordSet[word]['count'], wordCount)
 
 
 def getFrequency(word:str, wordCount:int, totalCount:int) -> float:

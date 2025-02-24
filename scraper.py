@@ -1,6 +1,8 @@
-import requests, math, pandas
-from bs4 import BeautifulSoup as bs
+import requests
+import math
 
+from bs4 import BeautifulSoup as bs
+import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import networkx as nx
@@ -15,20 +17,22 @@ stripCharacters = """(.,:;?!&*|_-–"'„“”«»<>)"""
 commonWords = top_n_list('en', 30) + ['']
 columnCount = 50
 savePlots = False
+showPlots = True
 plotFileType = 'svg' #valid file types: svg, png, jpg, pdf, tiff
 
 
 def main():
-    response = getData(url)
-    (wordSet, wordGraph) = buildWordGraphs(response)
+    response = get_data(url)
+    (wordSet, wordGraph) = build_word_graphs(response)
 
     #comment out visualization functions you don't need
-    plotWordCount(wordSet)
-    plotWordFrequency(wordSet)
+    plot_word_count(wordSet)
+    plot_word_frequency(wordSet)
 
-    visualizeGraph(wordSet, wordGraph)
+    visualize_graph(wordSet, wordGraph)
 
-def getData(url):
+
+def get_data(url):
     #requests data from url and extracts the html/text object
     try:
         request = requests.get(url, timeout=15)
@@ -42,7 +46,7 @@ def getData(url):
         exit()
 
 
-def buildWordGraphs(response) -> tuple:
+def build_word_graphs(response) -> tuple:
     #extracts all text from the websites html content. The text from each html element is seperated into sections
     try:
         soup = bs(response, 'html.parser')
@@ -59,9 +63,9 @@ def buildWordGraphs(response) -> tuple:
         words = [word.strip(stripCharacters).lower() for word in section.split(' ')]
         
         for i, word in enumerate(words):
-            updateCountDict(wordSet, word)
+            update_count_dict(wordSet, word)
             if i != len(words)-1:
-                updateGraphDict(wordGraph, words, word, i)
+                update_graph_dict(wordGraph, words, word, i)
         
     #exclude common words from wordSet.
     #networkx will remove all common words (nodes) in the wordGraph later
@@ -70,12 +74,12 @@ def buildWordGraphs(response) -> tuple:
      
     #add frequency data for each word in wordSet
     for word in wordSet:
-        wordSet[word]['frequency'] = getFrequency(word, wordSet[word]['count'], len(wordSet))
+        wordSet[word]['frequency'] = get_frequency(word, wordSet[word]['count'], len(wordSet))
     
     return (wordSet, wordGraph)
 
 
-def updateCountDict(wordSet, word):
+def update_count_dict(wordSet, word):
     #initializing word-count pair or updating count
     try:
         if word not in wordSet:
@@ -86,7 +90,7 @@ def updateCountDict(wordSet, word):
         print(f'an exception occured while building the word-count dictionary: {e}')
 
 
-def updateGraphDict(wordGraph, words, word, i):
+def update_graph_dict(wordGraph, words, word, i):
     #looping over every unchecked word in the same section and updating the weight/distance of the edge
     for n, neighbourWord in enumerate(words[i+1:], start=i+1):
         distance = 1 / (n - i)
@@ -94,11 +98,12 @@ def updateGraphDict(wordGraph, words, word, i):
         wordGraph[key] = wordGraph.get(key, 0) + distance
 
 
-def getFrequency(word:str, wordCount:int, totalCount:int) -> float:
+def get_frequency(word:str, wordCount:int, totalCount:int) -> float:
     try:
         expectedFrequency = zipf_frequency(word, 'en')
         #zipf_frequency returns 0 for unknown words (often brand names etc.)
-        if expectedFrequency == 0: expectedFrequency = 1
+        if expectedFrequency == 0: 
+            expectedFrequency = 2
     except Exception as e:
         print(f"an exception occured while getting zipf_frequencies for {word}: {e}")
         return 0
@@ -108,16 +113,16 @@ def getFrequency(word:str, wordCount:int, totalCount:int) -> float:
     return round(observedFrequency/expectedFrequency, 2)
 
 
-def getPlotSize(length:int) -> tuple:
+def get_plot_size(length:int) -> tuple:
     #get dynamic plot size based on number of data entries
     colWidth = 0.5
     plotWidth = max(10, length * colWidth - 10)
     return (plotWidth, 6)
 
 
-def getDataFrame(dict:dict, order:str):
+def get_data_frame(dict:dict, order:str):
     try:
-        df = pandas.DataFrame.from_dict(dict, orient='index')
+        df = pd.DataFrame.from_dict(dict, orient='index')
         df.reset_index(inplace=True)
         df.columns = ['words', 'count', 'frequency']
         df = df.sort_values(by=order, ascending=False)
@@ -127,37 +132,36 @@ def getDataFrame(dict:dict, order:str):
         print(f"couldn't create dataframe for {order}: {e}")
 
 
-def plotWordCount(wordSet:dict):
+def handle_plot_files(plot, name:str):
+    plot.set_xticks(plot.get_xticks())
+    plot.set_xticklabels(plot.get_xticklabels(), rotation=-90)
+    plt.tight_layout()
+    if savePlots:
+        plt.savefig(f'{name}.{plotFileType}')
+    if showPlots: 
+        plt.show()
+    plt.close()
+
+
+def plot_word_count(wordSet:dict):
     #creates bar plot showing words and their word count, order descending
-    df = getDataFrame(wordSet, 'count')
+    df = get_data_frame(wordSet, 'count')
 
-    fig, ax = plt.subplots(figsize=getPlotSize(len(df)))
+    fig, ax = plt.subplots(figsize=get_plot_size(len(df)))
     plot = sns.barplot(df, x='words', y='count', width=0.7, ax=ax)
-    plot.set_xticks(plot.get_xticks())
-    plot.set_xticklabels(plot.get_xticklabels(), rotation=-90)
-    plt.tight_layout()
-    if savePlots == True:
-        plt.savefig(f'word-count.{plotFileType}')
-    plt.show()
-    plt.close()
+    handle_plot_files(plot, 'word-counts')
 
 
-def plotWordFrequency(wordSet:dict):
-    #creates bar plot showing words and their showing their relative frequency values (observed / expected frequency), order descending
-    df = getDataFrame(wordSet, 'frequency')
+def plot_word_frequency(wordSet:dict):
+    #creates bar plot showing words and their relative frequency values (observed / expected frequency), order descending
+    df = get_data_frame(wordSet, 'frequency')
 
-    fig, ax = plt.subplots(figsize=getPlotSize(len(df)))
+    fig, ax = plt.subplots(figsize=get_plot_size(len(df)))
     plot = sns.barplot(df, x='words', y='frequency', width=0.7, ax=ax)
-    plot.set_xticks(plot.get_xticks())
-    plot.set_xticklabels(plot.get_xticklabels(), rotation=-90)
-    plt.tight_layout()
-    if savePlots == True:
-        plt.savefig(f'word-frequency.{plotFileType}')
-    plt.show()
-    plt.close()
+    handle_plot_files(plot, 'word-frequencies')
 
 
-def getNormalizedColor(cmap, minFreq:float, maxFreq:float, frequency:float) -> tuple:
+def get_normalized_color(cmap, minFreq:float, maxFreq:float, frequency:float) -> tuple:
     #converts the frequency values to a rgba color between blue and red
     normalizedFreq = (frequency - minFreq) / (maxFreq - minFreq)
     rgba = cmap(normalizedFreq)
@@ -165,7 +169,7 @@ def getNormalizedColor(cmap, minFreq:float, maxFreq:float, frequency:float) -> t
     return color
 
 
-def visualizeGraph(nodes:dict, edges:dict):
+def visualize_graph(nodes:dict, edges:dict):
     try:
         #adds node data and edge weights to nx graph
         G = nx.Graph()
@@ -188,7 +192,7 @@ def visualizeGraph(nodes:dict, edges:dict):
             #dynamic size of node and lable based on word count. node color from colormap based on frequency value
             if node in nodes: 
                 size = nodes[node]['count']**0.5
-                color = getNormalizedColor(cmap, minFreq, maxFreq, (nodes[node]['frequency']))
+                color = get_normalized_color(cmap, minFreq, maxFreq, (nodes[node]['frequency']))
             font = {'size': size*2, 'vadjust': -8, 'color': 'rgba(200, 200, 200, 0.7)'}
             nt.add_node(node, x=x * 1500, y=y * 1500, size=size*3, color=color, title=node, font=font)
          

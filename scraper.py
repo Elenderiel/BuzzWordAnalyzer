@@ -13,12 +13,13 @@ from wordfreq import zipf_frequency, top_n_list
 
 url = 'https://vaarhaft.com/'
 
-stripCharacters = """(.,:;?!&*|_-–"'„“”«»<>)"""
-commonWords = top_n_list('en', 30) + ['']
-columnCount = 50
 savePlots = False
 showPlots = True
-plotFileType = 'svg' #valid file types: svg, png, jpg, pdf, tiff
+fileType = 'svg' #valid file types: svg, png, jpg, pdf, tiff
+
+stripCharacters = """(.,:;?!&*|_-–"'„“”«»<>)"""
+commonWords = top_n_list('en', 30)
+columnCount = 50
 
 
 def main():
@@ -69,7 +70,7 @@ def build_word_graphs(response) -> tuple:
         
     #exclude common words from wordSet.
     #networkx will remove all common words (nodes) in the wordGraph later
-    for commonWord in commonWords:
+    for commonWord in commonWords + ['']:
         wordSet.pop(commonWord, None)
      
     #add frequency data for each word in wordSet
@@ -137,7 +138,7 @@ def handle_plot_files(plot, name:str):
     plot.set_xticklabels(plot.get_xticklabels(), rotation=-90)
     plt.tight_layout()
     if savePlots:
-        plt.savefig(f'{name}.{plotFileType}')
+        plt.savefig(f'{name}.{fileType}')
     if showPlots: 
         plt.show()
     plt.close()

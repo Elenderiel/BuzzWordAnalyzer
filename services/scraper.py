@@ -2,7 +2,6 @@ import requests
 import math
 
 from bs4 import BeautifulSoup as bs
-from pyvis.network import Network
 from wordfreq import zipf_frequency
 
 

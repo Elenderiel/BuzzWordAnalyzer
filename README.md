@@ -1,6 +1,6 @@
 # BuzzWordAnalyzer
 
-A fun little script, that analyses and visualizes the word usage of a website
+A fun little project, that analyses and visualizes the word usage of a website
 
 ## Settings
 

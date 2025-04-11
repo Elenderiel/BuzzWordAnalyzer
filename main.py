@@ -23,3 +23,6 @@ def main():
     plots.plot_word_frequency(wordSet, savePlots, showPlots, fileType, columnCount)
 
     graph.visualize_graph(wordSet, wordGraph, commonWords)
+
+
+main()

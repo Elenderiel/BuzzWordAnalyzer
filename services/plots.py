@@ -35,17 +35,17 @@ def handle_plot_files(plot, name:str, savePlots:bool, showPlots:bool, fileType:s
 
 def plot_word_count(wordSet:dict, savePlots:bool, showPlots:bool, fileType:str, columnCount:int):
     #creates bar plot showing words and their word count, order descending
-    df = get_data_frame(wordSet, 'count')
+    df = get_data_frame(wordSet, 'count', columnCount)
 
     fig, ax = plt.subplots(figsize=get_plot_size(len(df)))
     plot = sns.barplot(df, x='words', y='count', width=0.7, ax=ax)
-    handle_plot_files(plot, 'word-counts')
+    handle_plot_files(plot, 'word-counts', savePlots, showPlots, fileType)
 
 
 def plot_word_frequency(wordSet:dict, savePlots:bool, showPlots:bool, fileType:str, columnCount:int):
     #creates bar plot showing words and their relative frequency values (observed / expected frequency), order descending
-    df = get_data_frame(wordSet, 'frequency')
+    df = get_data_frame(wordSet, 'frequency', columnCount)
 
     fig, ax = plt.subplots(figsize=get_plot_size(len(df)))
     plot = sns.barplot(df, x='words', y='frequency', width=0.7, ax=ax)
-    handle_plot_files(plot, 'word-frequencies')
+    handle_plot_files(plot, 'word-frequencies', savePlots, showPlots, fileType)
